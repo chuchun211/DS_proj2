@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <queue>
+#include <climits>
 using namespace std;
 
 struct Point {
@@ -12,7 +13,7 @@ struct Point {
 class Floor{
 public:
     Floor(int m, int n, int B)
-    : row(m), col(n), battery(B), steps(-1) {
+    : row(m), col(n), capacity(B), steps(-1), uncleaned(0) {
         visited = new int*[m];
         dist = new int*[m];
         for(int i=0; i<m; i++) {
@@ -33,18 +34,17 @@ public:
     void compute_dis();
     string encode_output() {
         stringstream ss;
-        ss << steps << endl;
+        ss << steps;
         ss << command;
         return ss.str();
     }
     friend ostream& operator<<(ostream &output, const Floor &f);
 private:
-    int row, col, battery;
-    int br, bc;
+    int row, col, capacity;
+    int br, bc, battery, uncleaned, steps;
     char** arr;
     int** visited;
     int** dist;
-    int steps;
     string command;
 };
 
@@ -52,16 +52,19 @@ void Floor::get_battery_station()
 {
     for(int i=0; i<row; i++) {
         for(int j=0; j<col; j++) {
-            if(arr[i][j] == 'R') {
+            if(arr[i][j] == '0') {
+                uncleaned++;
+            }
+            else if(arr[i][j] == 'R') {
                 br = i;
                 bc = j;
                 //cout << i << " " << j << endl;
-                return;
             }
         }
     }
 }
 
+// using BFS to compute the shortest distance
 void Floor::compute_dis()
 {
     queue<Point> que;
@@ -89,18 +92,246 @@ void Floor::compute_dis()
             }
         }
     }
-//    for(int i=0; i<row; i++) {
-//        for(int j=0; j<col; j++) {
-//            printf("%2d ", dist[i][j]);
-//        }
-//        cout << endl;
-//    }
+    for(int i=0; i<row; i++) {
+        for(int j=0; j<col; j++) {
+            printf("%2d ", dist[i][j]);
+        }
+        cout << endl;
+    }
     return;
 }
 
 void Floor::cleaning()
 {
-
+    int r = br; // the position where the robot is
+    int c = bc;
+    stringstream ss;
+    visited[r][c] = 1;
+    while(uncleaned > 0) {
+        if(r == br && c == bc) // charge!
+            battery = capacity;
+        steps++;
+        ss << endl << r << " " << c;
+        cout << uncleaned << endl;
+        cout << r << " " << c << endl;
+        if( battery > dist[r][c] ) {
+            // visited the unvisited one first
+            // if the distance of the four directions are the same
+            // right > left > down > up
+            int shortest = INT_MAX;
+            int mov = 0;
+            int pr, pc;
+            if( c + 1 < col && dist[r][c+1] != -1 ) {
+                cout << "right\n";
+                if(!visited[r][c+1]) {
+                    c = c + 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(-dist[r][c+1] <= shortest) {
+                        shortest = -dist[r][c+1];
+                        pr = r;
+                        pc = c + 1;
+                    }
+                }
+            }
+            if( !mov && r + 1 < row && dist[r+1][c] != -1 ) {
+                cout << "down\n";
+                if(!visited[r+1][c]) {
+                    r = r + 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(-dist[r+1][c] <= shortest) {
+                        shortest = -dist[r+1][c];
+                        pr = r + 1;
+                        pc = c;
+                    }
+                }
+            }
+            if( !mov && c - 1 >= 0 && dist[r][c-1] != -1 ) {
+                cout << "left\n";
+                if(!visited[r][c-1]) {
+                    c = c - 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(-dist[r][c-1] <= shortest) {
+                        shortest = -dist[r][c-1];
+                        pr = r;
+                        pc = c - 1;
+                    }
+                }
+            }
+            if( !mov && r - 1 >= 0 && dist[r-1][c] != -1 ) {
+                cout << "up\n";
+                if(!visited[r-1][c]) {
+                    r = r - 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(-dist[r-1][c] <= shortest) {
+                        shortest = -dist[r-1][c];
+                        pr = r - 1;
+                        pc = c;
+                    }
+                }
+            }
+            if(!mov) {
+                r = pr;
+                c = pc;
+            }
+            cout << mov << " " << r << " " << c << endl;
+        }
+        else { // runs out of the battery, need to go back to 'R'
+            // find the shortest path back to 'R'
+            // it should prefer the one which has not been visited yet
+            cout << "here\n";
+            if(battery <= 0) {
+                ss << "run out of battery!!!!!\n";
+                cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+                break;
+            }
+            int shortest = INT_MAX;
+            int mov = 0;
+            int pr, pc;
+            if( c + 1 < col && dist[r][c+1] == battery-1 ) {
+                cout << "right\n";
+                if(!visited[r][c+1]) {
+                    c = c + 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(dist[r][c+1] < shortest) {
+                        shortest = dist[r][c+1];
+                        pr = r;
+                        pc = c + 1;
+                    }
+                }
+            }
+            if( !mov && r + 1 < row && dist[r+1][c] == battery-1 ) {
+                cout << "down\n";
+                if(!visited[r+1][c]) {
+                    r = r + 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(dist[r+1][c] < shortest) {
+                        shortest = dist[r+1][c];
+                        pr = r + 1;
+                        pc = c;
+                    }
+                }
+            }
+            if( !mov && c - 1 >= 0 && dist[r][c-1] == battery-1 ) {
+                cout << "left\n";
+                if(!visited[r][c-1]) {
+                    c = c - 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(dist[r][c-1] < shortest) {
+                        shortest = dist[r][c-1];
+                        pr = r;
+                        pc = c - 1;
+                    }
+                }
+            }
+            if( !mov && r - 1 >= 0 && dist[r-1][c] == battery-1 ) {
+                cout << "up\n";
+                if(!visited[r-1][c]) {
+                    r = r - 1;
+                    visited[r][c] = 1;
+                    mov = 1;
+                    uncleaned--;
+                }
+                else { // maybe stuck in the corner or somewhat, should go back
+                    if(dist[r-1][c] < shortest) {
+                        shortest = dist[r-1][c];
+                        pr = r - 1;
+                        pc = c;
+                    }
+                }
+            }
+            if(!mov) {
+                r = pr;
+                c = pc;
+            }
+        }
+        battery--;
+        for(int i=0; i<row; i++) {
+            for(int j=0; j<col; j++) {
+                cout << visited[i][j] << " ";
+            }
+            cout << endl;
+        }
+    }
+    // TODO: clean all but still have to go back to 'R'
+    while(r != br || c != bc) {
+        if(battery <= 0) {
+            ss << "run out of battery!!!!!\n";
+            cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+            break;
+        }
+        steps++;
+        ss << endl << r << " " << c;
+        cout << r << " " << c << endl;
+        int shortest = INT_MAX;
+        int pr, pc;
+        if( c + 1 < col && dist[r][c+1] != -1 ) {
+            cout << "right\n";
+            if(dist[r][c+1] < shortest) {
+                shortest = dist[r][c+1];
+                pr = r;
+                pc = c + 1;
+            }
+        }
+        if( r + 1 < row && dist[r+1][c] != -1 ) {
+            cout << "down\n";
+            if(dist[r+1][c] < shortest) {
+                shortest = dist[r+1][c];
+                pr = r + 1;
+                pc = c;
+            }
+        }
+        if( c - 1 >= 0 && dist[r][c-1] != -1 ) {
+            cout << "left\n";
+            if(dist[r][c-1] < shortest) {
+                shortest = dist[r][c-1];
+                pr = r;
+                pc = c - 1;
+            }
+        }
+        if( r - 1 >= 0 && dist[r-1][c] != -1 ) {
+            cout << "up\n";
+            if(dist[r-1][c] < shortest) {
+                shortest = dist[r-1][c];
+                pr = r - 1;
+                pc = c;
+            }
+        }
+        r = pr;
+        c = pc;
+        battery--;
+    }
+    steps++;
+    ss << endl << r << " " << c;
+    cout << r << " " << c << endl;
+    command = ss.str();
 }
 
 ostream& operator<<(ostream &output, const Floor &f)
